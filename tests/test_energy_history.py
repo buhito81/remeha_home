@@ -403,6 +403,63 @@ def test_conflicting_day_logs_warning(caplog: pytest.LogCaptureFixture) -> None:
     assert "Conflicting" in caplog.text
 
 
+@pytest.mark.parametrize(
+    ("timestamp", "day"),
+    [
+        ("2026-01-09T00:00:00+00:00", "2026-01-09"),
+        ("2026-01-09T22:00:00+00:00", "2026-01-09"),
+        ("2026-01-09T23:00:00+00:00", "2026-01-10"),
+    ],
+)
+async def test_history_day_is_read_like_the_sensors(
+    hass: HomeAssistant, timestamp: str, day: str
+) -> None:
+    """A complete day has its date, a running day its latest data in UTC."""
+    await hass.config.async_set_time_zone("Europe/Amsterdam")
+    item = _january_9()
+    item["timeStamp"] = timestamp
+    assert normalize_history_day(item)["date"] == day
+
+
+@pytest.mark.parametrize("with_yesterday", [False, True])
+async def test_new_day_with_the_date_of_yesterday_is_not_yesterday(
+    hass: HomeAssistant, with_yesterday: bool
+) -> None:
+    """Right after midnight the new, empty day can carry yesterday's date in UTC.
+
+    Read in local time it is the new day, so it is not taken for yesterday: alone
+    (as measured), yesterday is missing, not 0; with yesterday's record, yesterday
+    keeps its own figures.
+    """
+    await hass.config.async_set_time_zone("Europe/Amsterdam")
+    new_day = _january_9()
+    new_day["timeStamp"] = "2026-01-09T23:00:00+00:00"
+    for field in (
+        "heatingEnergyConsumed",
+        "heatingEnergyDelivered",
+        "hotWaterEnergyConsumed",
+        "hotWaterEnergyDelivered",
+    ):
+        new_day[field] = 0.0
+    for producer in new_day["producerPerformanceStatistics"]["producers"][:2]:
+        producer["energyConsumptionCH"] = 0.0
+        producer["energyProductionCH"] = 0.0
+
+    data = [_january_9(), new_day] if with_yesterday else [new_day]
+
+    result = combine_history(date(2026, 1, 9), date(2026, 1, 9), [{"data": data}])
+
+    if with_yesterday:
+        assert result["missing_dates"] == []
+        assert result["period"]["complete"] is True
+        assert result["period"]["heat_pump_heating_consumed_kwh"] == 18.0
+        assert result["period"]["heat_pump_heating_delivered_kwh"] == 68.0
+    else:
+        assert result["missing_dates"] == ["2026-01-09"]
+        assert result["period"]["complete"] is False
+        assert result["period"]["heat_pump_heating_consumed_kwh"] is None
+
+
 def test_unmodified_real_consumption_fixture_has_expected_shape() -> None:
     """Check the existing anonymized daily API fixture without synthesized rows."""
     raw = load_fixture("consumption.json")

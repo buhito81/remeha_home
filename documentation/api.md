@@ -824,10 +824,13 @@ days: from 06:00 up to yesterday, before 06:00 up to the day before yesterday.
 It shortens a later `end_date` to that day before it calls the API, and rejects
 a period that starts after it.
 
-The API's `timeStamp` for a historical record represents a **local calendar
-date**, despite the UTC-looking `Z` suffix. The action therefore returns
-`date` only, never a misleading UTC instant. Dates are not shifted across
-daylight-saving transitions.
+The API's `timeStamp` for a complete day represents a **local calendar
+date** at 00:00 UTC, despite the UTC-looking suffix. For a day still running it
+is the time of its latest data in UTC, so right after midnight the new day can
+carry yesterday's date (see [Daily consumption](#daily-consumption)). The action
+reads the date like the sensors do: a `timeStamp` at 00:00 UTC as written, any
+other in Home Assistant's time zone. It returns `date` only, never a misleading
+UTC instant. Dates are not shifted across daylight-saving transitions.
 
 The output keeps heat-pump **space-heating** electricity and delivered heating
 energy separate from the gas boiler's space-heating input. The appliance totals
